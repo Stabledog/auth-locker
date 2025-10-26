@@ -1,0 +1,186 @@
+<!-- TODO:  
+ We need to test/verify that github pages will work as a solution for our problem.
+
+ Create a 1-page very simple app with no frills. 
+
+ 1.  It must display a text file located on the host in the same dir.
+ 2.  It must be hostable by Github Spaces and comply with the limitations of that platform
+ 3.  It must allow the user to input a text string
+ 4.  It must process the contents of the text file plus the user-supplied string in the browser with no post-backs or URL exposure of the user's 'secret'
+ 5.  Any sort of transformation is acceptable for proof of concept  (later this will become a decryption task)
+ 
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Pages Test - Auth Locker PoC</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-left: 4px solid #4CAF50;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .output {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8f5e9;
+            border: 1px solid #4CAF50;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .file-content {
+            background: #fff3cd;
+            padding: 10px;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Auth Locker - GitHub Pages PoC</h1>
+        
+        <div class="section">
+            <h2>1. Text File Content</h2>
+            <p>Content from <code>data.txt</code> in the same directory:</p>
+            <div id="fileContent" class="file-content">Loading...</div>
+        </div>
+
+        <div class="section">
+            <h2>2. User Input (Secret Key)</h2>
+            <label for="userSecret">Enter your secret string:</label>
+            <input type="text" id="userSecret" placeholder="Enter a secret passphrase..." />
+        </div>
+
+        <div class="section">
+            <h2>3. Process Data</h2>
+            <button onclick="processData()">Transform Data (Client-Side Only)</button>
+            <div id="result" style="display:none;" class="output"></div>
+        </div>
+
+        <div class="section">
+            <h3>ℹ️ How This Proves GitHub Pages Compatibility:</h3>
+            <ul>
+                <li>✅ Loads and displays a text file from the same directory</li>
+                <li>✅ Runs entirely in the browser (static hosting compatible)</li>
+                <li>✅ Accepts user input without any server-side processing</li>
+                <li>✅ Performs client-side transformation using JavaScript</li>
+                <li>✅ No POST requests or URL parameter exposure of secrets</li>
+                <li>✅ Works with GitHub Pages limitations (static files only)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Load the text file on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('data.txt');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const text = await response.text();
+                document.getElementById('fileContent').textContent = text;
+            } catch (error) {
+                document.getElementById('fileContent').textContent = 
+                    `Error loading file: ${error.message}\n\nMake sure data.txt exists in the same directory.`;
+                document.getElementById('fileContent').style.background = '#ffebee';
+                document.getElementById('fileContent').style.borderColor = '#f44336';
+            }
+        });
+
+        // Process data client-side (this would be decryption in the real app)
+        function processData() {
+            const fileContent = document.getElementById('fileContent').textContent;
+            const userSecret = document.getElementById('userSecret').value;
+            const resultDiv = document.getElementById('result');
+
+            if (!userSecret) {
+                alert('Please enter a secret string first!');
+                return;
+            }
+
+            if (fileContent.includes('Error loading')) {
+                alert('Cannot process: file content not loaded properly');
+                return;
+            }
+
+            // Simple transformation for PoC: XOR-like operation + Base64
+            // In production, this would be actual decryption
+            const transformed = transformData(fileContent, userSecret);
+            
+            resultDiv.innerHTML = `
+                <strong>Transformation Complete!</strong><br><br>
+                <strong>File Content Length:</strong> ${fileContent.length} characters<br>
+                <strong>Secret Length:</strong> ${userSecret.length} characters<br>
+                <strong>Transformed Result:</strong><br><br>
+                ${transformed}
+                <br><br>
+                <em>Note: This is a simple XOR + Base64 transformation for proof of concept. 
+                In production, this would perform actual decryption.</em>
+            `;
+            resultDiv.style.display = 'block';
+        }
+
+        // Simple transformation function (PoC for future decryption)
+        function transformData(data, secret) {
+            // XOR each character with secret (cycling through secret chars)
+            let result = '';
+            for (let i = 0; i < data.length; i++) {
+                const dataChar = data.charCodeAt(i);
+                const secretChar = secret.charCodeAt(i % secret.length);
+                result += String.fromCharCode(dataChar ^ secretChar);
+            }
+            // Encode to Base64 to make it printable
+            return btoa(result);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+This is sample encrypted data from data.txt file.
+In production, this would contain actual encrypted credentials.
+For now, it's just plain text to verify GitHub Pages can:
+- Serve static files from the same directory
+- Allow client-side JavaScript to fetch and read them
+- Process data entirely in the browser without server interaction
+
+Sample data: SECRET_CREDENTIALS_WOULD_GO_HERE_123456789
