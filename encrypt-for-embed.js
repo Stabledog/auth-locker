@@ -92,31 +92,13 @@ async function getPlaintext() {
     return Buffer.concat(chunks).toString('utf8');
   }
 
-  // Interactive prompt - use readline instead of stdin chunks
-  console.log('Enter plaintext (type EOF on a new line when done, or Ctrl+C to cancel):');
-  
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: ''
-  });
-
-  return new Promise((resolve) => {
-    const lines = [];
-    
-    rl.on('line', (line) => {
-      // Check for EOF marker
-      if (line.trim() === 'EOF') {
-        rl.close();
-        return;
-      }
-      lines.push(line);
-    });
-
-    rl.on('close', () => {
-      resolve(lines.join('\n'));
-    });
-  });
+  // Interactive prompt
+  console.log('Enter plaintext (press Ctrl+D when done, or Ctrl+C to cancel):');
+  const chunks = [];
+  for await (const chunk of process.stdin) {
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 /**

@@ -1,186 +1,522 @@
-<!-- TODO:  
- We need to test/verify that github pages will work as a solution for our problem.
-
- Create a 1-page very simple app with no frills. 
-
- 1.  It must display a text file located on the host in the same dir.
- 2.  It must be hostable by Github Spaces and comply with the limitations of that platform
- 3.  It must allow the user to input a text string
- 4.  It must process the contents of the text file plus the user-supplied string in the browser with no post-backs or URL exposure of the user's 'secret'
- 5.  Any sort of transformation is acceptable for proof of concept  (later this will become a decryption task)
- 
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GitHub Pages Test - Auth Locker PoC</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 50px auto;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-        }
-        .section {
-            margin: 20px 0;
-            padding: 15px;
-            background: #f9f9f9;
-            border-left: 4px solid #4CAF50;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input[type="text"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        .output {
-            margin-top: 15px;
-            padding: 10px;
-            background: #e8f5e9;
-            border: 1px solid #4CAF50;
-            border-radius: 4px;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-        }
-        .file-content {
-            background: #fff3cd;
-            padding: 10px;
-            border: 1px solid #ffc107;
-            border-radius: 4px;
-            margin-top: 10px;
-            white-space: pre-wrap;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" 
+        content="default-src 'self'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self';">
+  <title>🔐 Auth Locker - Secret Recovery</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    h1 {
+      font-size: 28px;
+      color: #333;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .input-group {
+      margin-bottom: 20px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    .password-wrapper {
+      position: relative;
+    }
+
+    input[type="password"],
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 40px 12px 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-size: 16px;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .toggle-password {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #666;
+      font-size: 20px;
+      padding: 4px;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: #667eea;
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #5568d3;
+    }
+
+    .btn-secondary {
+      background: #e0e0e0;
+      color: #333;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: #d0d0d0;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status {
+      padding: 12px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      display: none;
+      font-size: 14px;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.loading {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+
+    .status.error {
+      background: #ffebee;
+      color: #c62828;
+    }
+
+    .status.success {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+
+    .output-section {
+      display: none;
+    }
+
+    .output-section.show {
+      display: block;
+    }
+
+    .output-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .output-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .btn-copy {
+      background: #667eea;
+      color: white;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-copy:hover {
+      background: #5568d3;
+    }
+
+    .output-box {
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 16px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      user-select: all;
+    }
+
+    .timer {
+      text-align: center;
+      color: #666;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+
+    footer {
+      margin-top: 30px;
+      text-align: center;
+      color: #999;
+      font-size: 12px;
+    }
+
+    @media (max-width: 640px) {
+      .container {
+        padding: 24px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .button-group {
+        flex-direction: column;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔐 Auth Locker - GitHub Pages PoC</h1>
-        
-        <div class="section">
-            <h2>1. Text File Content</h2>
-            <p>Content from <code>data.txt</code> in the same directory:</p>
-            <div id="fileContent" class="file-content">Loading...</div>
-        </div>
+  <div class="container">
+    <header>
+      <h1>🔐 Auth Locker</h1>
+      <p class="subtitle">Secret Recovery Tool</p>
+    </header>
 
-        <div class="section">
-            <h2>2. User Input (Secret Key)</h2>
-            <label for="userSecret">Enter your secret string:</label>
-            <input type="text" id="userSecret" placeholder="Enter a secret passphrase..." />
-        </div>
+    <div class="status" id="status"></div>
 
-        <div class="section">
-            <h2>3. Process Data</h2>
-            <button onclick="processData()">Transform Data (Client-Side Only)</button>
-            <div id="result" style="display:none;" class="output"></div>
-        </div>
-
-        <div class="section">
-            <h3>ℹ️ How This Proves GitHub Pages Compatibility:</h3>
-            <ul>
-                <li>✅ Loads and displays a text file from the same directory</li>
-                <li>✅ Runs entirely in the browser (static hosting compatible)</li>
-                <li>✅ Accepts user input without any server-side processing</li>
-                <li>✅ Performs client-side transformation using JavaScript</li>
-                <li>✅ No POST requests or URL parameter exposure of secrets</li>
-                <li>✅ Works with GitHub Pages limitations (static files only)</li>
-            </ul>
-        </div>
+    <div class="input-group">
+      <label for="passphrase">Recovery Passphrase</label>
+      <div class="password-wrapper">
+        <input 
+          type="password" 
+          id="passphrase" 
+          placeholder="Enter your recovery passphrase"
+          autocomplete="off"
+          aria-label="Recovery passphrase">
+        <button class="toggle-password" id="togglePassword" type="button" aria-label="Toggle password visibility">
+          👁️
+        </button>
+      </div>
     </div>
 
-    <script>
-        // Load the text file on page load
-        window.addEventListener('DOMContentLoaded', async () => {
-            try {
-                const response = await fetch('data.txt');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const text = await response.text();
-                document.getElementById('fileContent').textContent = text;
-            } catch (error) {
-                document.getElementById('fileContent').textContent = 
-                    `Error loading file: ${error.message}\n\nMake sure data.txt exists in the same directory.`;
-                document.getElementById('fileContent').style.background = '#ffebee';
-                document.getElementById('fileContent').style.borderColor = '#f44336';
-            }
-        });
+    <div class="button-group">
+      <button class="btn-primary" id="decryptBtn">Decrypt</button>
+      <button class="btn-secondary" id="clearBtn">Clear</button>
+    </div>
 
-        // Process data client-side (this would be decryption in the real app)
-        function processData() {
-            const fileContent = document.getElementById('fileContent').textContent;
-            const userSecret = document.getElementById('userSecret').value;
-            const resultDiv = document.getElementById('result');
+    <div class="output-section" id="outputSection">
+      <div class="output-header">
+        <h3>Decrypted Content</h3>
+        <button class="btn-copy" id="copyBtn">Copy</button>
+      </div>
+      <pre class="output-box" id="output"></pre>
+      <div class="timer" id="timer"></div>
+    </div>
 
-            if (!userSecret) {
-                alert('Please enter a secret string first!');
-                return;
-            }
+    <footer>
+      Client-side decryption only • No server communication after load
+    </footer>
+  </div>
 
-            if (fileContent.includes('Error loading')) {
-                alert('Cannot process: file content not loaded properly');
-                return;
-            }
+  <script>
+    // Crypto parameters (must match encryption script)
+    const PBKDF2_ITERATIONS = 200000;
+    const PBKDF2_KEYLEN = 256; // bits
+    const PBKDF2_HASH = 'SHA-256';
+    const GCM_TAG_LENGTH = 16; // bytes
+    const AUTO_CLEAR_SECONDS = 60;
 
-            // Simple transformation for PoC: XOR-like operation + Base64
-            // In production, this would be actual decryption
-            const transformed = transformData(fileContent, userSecret);
-            
-            resultDiv.innerHTML = `
-                <strong>Transformation Complete!</strong><br><br>
-                <strong>File Content Length:</strong> ${fileContent.length} characters<br>
-                <strong>Secret Length:</strong> ${userSecret.length} characters<br>
-                <strong>Transformed Result:</strong><br><br>
-                ${transformed}
-                <br><br>
-                <em>Note: This is a simple XOR + Base64 transformation for proof of concept. 
-                In production, this would perform actual decryption.</em>
-            `;
-            resultDiv.style.display = 'block';
+    // Global state
+    let encryptedData = null;
+    let clearTimer = null;
+
+    // DOM elements
+    const passphraseInput = document.getElementById('passphrase');
+    const togglePasswordBtn = document.getElementById('togglePassword');
+    const decryptBtn = document.getElementById('decryptBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const statusDiv = document.getElementById('status');
+    const outputSection = document.getElementById('outputSection');
+    const outputPre = document.getElementById('output');
+    const timerDiv = document.getElementById('timer');
+
+    // Status message helper
+    function showStatus(message, type) {
+      statusDiv.textContent = message;
+      statusDiv.className = `status show ${type}`;
+    }
+
+    function hideStatus() {
+      statusDiv.className = 'status';
+    }
+
+    // Base64 to ArrayBuffer conversion
+    function base64ToArrayBuffer(base64) {
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+
+    // Load and parse content.txt
+    async function loadEncryptedContent() {
+      try {
+        showStatus('Loading encrypted content...', 'loading');
+        
+        const response = await fetch('content.txt');
+        if (!response.ok) {
+          throw new Error('Failed to load content.txt');
+        }
+        
+        const text = await response.text();
+        const lines = text.trim().split('\n');
+        
+        if (lines.length !== 3) {
+          throw new Error('Invalid content.txt format');
         }
 
-        // Simple transformation function (PoC for future decryption)
-        function transformData(data, secret) {
-            // XOR each character with secret (cycling through secret chars)
-            let result = '';
-            for (let i = 0; i < data.length; i++) {
-                const dataChar = data.charCodeAt(i);
-                const secretChar = secret.charCodeAt(i % secret.length);
-                result += String.fromCharCode(dataChar ^ secretChar);
-            }
-            // Encode to Base64 to make it printable
-            return btoa(result);
+        const data = {};
+        for (const line of lines) {
+          const [key, value] = line.split('=');
+          if (!key || !value) {
+            throw new Error('Malformed content.txt line');
+          }
+          data[key.trim()] = value.trim();
         }
-    </script>
+
+        if (!data.SALT_B64 || !data.IV_B64 || !data.CT_B64) {
+          throw new Error('Missing required fields in content.txt');
+        }
+
+        encryptedData = {
+          salt: base64ToArrayBuffer(data.SALT_B64),
+          iv: base64ToArrayBuffer(data.IV_B64),
+          ciphertext: base64ToArrayBuffer(data.CT_B64)
+        };
+
+        hideStatus();
+        decryptBtn.disabled = false;
+        
+      } catch (error) {
+        showStatus(`Error: ${error.message}`, 'error');
+        decryptBtn.disabled = true;
+      }
+    }
+
+    // Decrypt function
+    async function decrypt() {
+      const passphrase = passphraseInput.value;
+      
+      if (!passphrase) {
+        showStatus('Please enter your passphrase', 'error');
+        return;
+      }
+
+      if (!encryptedData) {
+        showStatus('Encrypted content not loaded', 'error');
+        return;
+      }
+
+      try {
+        showStatus('Deriving encryption key...', 'loading');
+        decryptBtn.disabled = true;
+
+        // Import passphrase as key material
+        const enc = new TextEncoder();
+        const keyMaterial = await crypto.subtle.importKey(
+          'raw',
+          enc.encode(passphrase),
+          'PBKDF2',
+          false,
+          ['deriveKey']
+        );
+
+        // Derive AES-GCM key using PBKDF2
+        const key = await crypto.subtle.deriveKey(
+          {
+            name: 'PBKDF2',
+            salt: encryptedData.salt,
+            iterations: PBKDF2_ITERATIONS,
+            hash: PBKDF2_HASH
+          },
+          keyMaterial,
+          {
+            name: 'AES-GCM',
+            length: PBKDF2_KEYLEN
+          },
+          false,
+          ['decrypt']
+        );
+
+        showStatus('Decrypting...', 'loading');
+
+        // Decrypt using AES-GCM
+        const decrypted = await crypto.subtle.decrypt(
+          {
+            name: 'AES-GCM',
+            iv: encryptedData.iv
+          },
+          key,
+          encryptedData.ciphertext
+        );
+
+        // Convert to UTF-8 string
+        const plaintext = new TextDecoder().decode(decrypted);
+        
+        // Display result
+        outputPre.textContent = plaintext;
+        outputSection.classList.add('show');
+        showStatus('✓ Decryption successful', 'success');
+        
+        // Start auto-clear timer
+        startAutoClearTimer();
+        
+      } catch (error) {
+        showStatus('Decryption failed. Wrong passphrase?', 'error');
+        outputSection.classList.remove('show');
+      } finally {
+        decryptBtn.disabled = false;
+      }
+    }
+
+    // Clear function
+    function clear() {
+      passphraseInput.value = '';
+      outputPre.textContent = '';
+      outputSection.classList.remove('show');
+      hideStatus();
+      stopAutoClearTimer();
+    }
+
+    // Copy to clipboard
+    async function copyToClipboard() {
+      try {
+        await navigator.clipboard.writeText(outputPre.textContent);
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = 'Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = originalText;
+        }, 2000);
+      } catch (error) {
+        showStatus('Failed to copy to clipboard', 'error');
+      }
+    }
+
+    // Auto-clear timer
+    function startAutoClearTimer() {
+      stopAutoClearTimer();
+      let remaining = AUTO_CLEAR_SECONDS;
+      
+      const updateTimer = () => {
+        if (remaining <= 0) {
+          clear();
+          showStatus('Content auto-cleared for security', 'success');
+          setTimeout(hideStatus, 3000);
+        } else {
+          timerDiv.textContent = `Content will auto-clear in ${remaining}s`;
+          remaining--;
+          clearTimer = setTimeout(updateTimer, 1000);
+        }
+      };
+      
+      updateTimer();
+    }
+
+    function stopAutoClearTimer() {
+      if (clearTimer) {
+        clearTimeout(clearTimer);
+        clearTimer = null;
+      }
+      timerDiv.textContent = '';
+    }
+
+    // Toggle password visibility
+    togglePasswordBtn.addEventListener('click', () => {
+      const type = passphraseInput.type === 'password' ? 'text' : 'password';
+      passphraseInput.type = type;
+      togglePasswordBtn.textContent = type === 'password' ? '👁️' : '🙈';
+    });
+
+    // Event listeners
+    decryptBtn.addEventListener('click', decrypt);
+    clearBtn.addEventListener('click', clear);
+    copyBtn.addEventListener('click', copyToClipboard);
+    
+    passphraseInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        decrypt();
+      }
+    });
+
+    // Load encrypted content on page load
+    loadEncryptedContent();
+  </script>
 </body>
 </html>
