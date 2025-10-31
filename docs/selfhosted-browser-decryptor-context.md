@@ -23,7 +23,7 @@ Provide a zero-install, cross-platform recovery path for critical secrets (e.g.,
 | KDF  | PBKDF2-HMAC-SHA256 | 200 000 iterations (configurable) |
 | Cipher | AES-256-GCM | 12-byte IV, 16-byte tag |
 | Salt | 16 bytes random | stored Base64 in content.txt |
-| Encoding | Base64 for salt / iv / ciphertext (+ tag) | stored in content.txt |
+| Encoding | Base64 for salt / iv / ciphertext (+ tag) | Each Base64 string on its own line in content.txt; ciphertext line length depends on plaintext size |
 
 ## Implementation Components
 ### 1. **`encrypt-for-embed.js`** (Node script, prepares on trusted machine)
@@ -46,12 +46,13 @@ Single-page app:
 - No network calls except initial load of index.html and content.txt; all processing local.
 
 ### 3. **`content.txt`** (regenerated when secrets change)
-Simple text format:
+Simple text format with three lines:
 ```
 SALT_B64=<base64-encoded-salt>
 IV_B64=<base64-encoded-iv>
 CT_B64=<base64-encoded-ciphertext-with-tag>
 ```
+**Note:** The plaintext to be encrypted can be arbitrarily long (e.g., multi-line documents, JSON structures). The Base64-encoded ciphertext+tag will be a single continuous string that may be quite long but will always be on one line. The parser splits by newline and extracts the value after `=` on each line.
 
 ## Copilot / LLM Tasks
 When editing this project, Copilot should:
