@@ -161,7 +161,26 @@ Implement security enhancements:
 
 ---
 
-## Task 6: Create README and Documentation
+## Task 6: Input Assembly for Encryptor
+**Status:** PENDING - To be defined
+
+This task will focus on how to assemble the plaintext input for `encrypt-for-embed.js` from external sources (password managers, secure notes, environment variables, etc.).
+
+**Scope:**
+- Workflow for gathering secrets from various sources
+- Format recommendations (JSON, YAML, plain text)
+- Best practices for temporary file handling
+- Integration with password managers (1Password CLI, Bitwarden CLI, etc.)
+- Template examples
+
+**Instructions:**
+- To be expanded based on requirements
+- Will define scripts/helpers to pull from external sources
+- Document secure practices for handling plaintext before encryption
+
+---
+
+## Task 7: Create README and Documentation
 **File:** README.md (root directory)
 
 Document:
@@ -181,7 +200,7 @@ Document:
 
 ---
 
-## Task 7: Testing Checklist
+## Task 8: Testing Checklist
 Create test scenarios:
 
 1. ✅ Encrypt sample text with known passphrase
