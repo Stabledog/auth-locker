@@ -162,8 +162,8 @@ echo "2. Re-encrypt when ready:"
 echo "   bash encrypt.sh \"$LOCKER_NAME\""
 echo
 echo "3. Deploy to GitHub Pages:"
-echo "   git add \"docs/lockers/$LOCKER_NAME/\""
-echo "   git commit -m \"Add $LOCKER_NAME locker\""
+echo "   git add docs/lockers/\"$LOCKER_NAME\"/"
+echo "   git commit -m 'Add $LOCKER_NAME locker'"
 echo "   git push"
 echo
 echo "4. Access your locker:"
