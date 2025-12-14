@@ -52,8 +52,8 @@ echo "Banking info" > tmp/banking.md
 bash encrypt.sh banking
 ```
 Access at:
-- https://stabledog.github.io/auth-locker/sally/
-- https://stabledog.github.io/auth-locker/banking/
+- https://stabledog.github.io/auth-locker/lockers/sally/
+- https://stabledog.github.io/auth-locker/lockers/banking/
 
 Each locker has its own passphrase and encrypted content file.
 
@@ -173,7 +173,7 @@ If you prefer to do it manually:
    git push
    ```
 
-5. Access at: `https://stabledog.github.io/auth-locker/mylocker/`
+5. Access at: `https://stabledog.github.io/auth-locker/lockers/mylocker/`
 
 ## Important Notes
 
