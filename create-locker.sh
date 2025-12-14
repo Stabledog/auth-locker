@@ -56,11 +56,25 @@ fi
 if [ -d "$LOCKER_DIR" ]; then
     echo -e "${YELLOW}⚠ Warning: Locker '$LOCKER_NAME' already exists${NC}"
     echo
+    
+    # Offer to backup existing content
+    if [ -f "$CONTENT_FILE" ]; then
+        echo "Existing encrypted content found. A backup will be created."
+        BACKUP_FILE="${CONTENT_FILE}.backup.$(date +%Y%m%d-%H%M%S)"
+    fi
+    
     read -p "Do you want to reinitialize it? This will overwrite existing files. (y/N) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
         echo "Aborted."
         exit 0
+    fi
+    
+    # Create backup if content exists
+    if [ -n "$BACKUP_FILE" ] && [ -f "$CONTENT_FILE" ]; then
+        cp "$CONTENT_FILE" "$BACKUP_FILE"
+        echo -e "${GREEN}✓${NC} Backup created: $BACKUP_FILE"
+        echo
     fi
 fi
 
