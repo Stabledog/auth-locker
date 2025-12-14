@@ -9,6 +9,10 @@ https://stabledog.github.io/auth-locker/
 
 You can now create multiple independent encrypted lockers, each with its own passphrase and content. This allows you to organize different types of secrets (e.g., personal, banking, work) into separate encrypted containers.
 
+**Security Note:** Each locker uses its own temporary file to prevent accidentally mixing secrets:
+- Default locker: `tmp/main.md`
+- Named lockers: `tmp/<locker-name>.md` (e.g., `tmp/sally.md`, `tmp/banking.md`)
+
 ## Quick Start
 
 ### Creating a New Locker (Recommended)
@@ -21,12 +25,12 @@ bash create-locker.sh mylocker
 
 This will:
 1. Create the locker directory structure
-2. Generate a template content file
+2. Generate a template content file at `tmp/mylocker.md`
 3. Prompt you to create a passphrase
 4. Encrypt the initial content
 5. Set up the UI (index.html)
 
-Then you can edit `tmp/main.md` with your actual secrets and re-encrypt:
+Then you can edit `tmp/mylocker.md` with your actual secrets and re-encrypt:
 ```bash
 bash encrypt.sh mylocker
 ```
@@ -35,11 +39,16 @@ bash encrypt.sh mylocker
 ```bash
 bash encrypt.sh
 ```
-Access at: https://stabledog.github.io/auth-locker/
+Uses `tmp/main.md` and access at: https://stabledog.github.io/auth-locker/
 
 ### Named Lockers (Manual Method)
 ```bash
+# Create your content file
+echo "My secrets" > tmp/sally.md
 bash encrypt.sh sally
+
+# Another locker
+echo "Banking info" > tmp/banking.md
 bash encrypt.sh banking
 ```
 Access at:
@@ -59,12 +68,13 @@ Each locker has its own passphrase and encrypted content file.
 
 2. **Save to temporary file**:
    ```bash
-   # Save the decrypted content to tmp/main.md
+   # For default locker, save to tmp/main.md
+   # For named locker "sally", save to tmp/sally.md
    # (Use your preferred editor)
    ```
 
 3. **Edit the secrets**:
-   - Open `tmp/main.md` in your editor
+   - Open the appropriate file in your editor (`tmp/main.md` for default, `tmp/<locker-name>.md` for named)
    - Update/add/remove secrets as needed
    - Save the file
 
@@ -108,7 +118,11 @@ Each locker has its own passphrase and encrypted content file.
 
 7. **Clean up** (recommended):
    ```bash
+   # For default locker
    rm tmp/main.md
+   
+   # For named locker (e.g., sally)
+   rm tmp/sally.md
    ```
 
 ## Creating a New Locker
@@ -124,12 +138,12 @@ bash create-locker.sh mylocker
 The script will:
 1. Create the directory structure (`docs/lockers/mylocker/`)
 2. Set up the UI (`index.html`)
-3. Generate a template content file (`tmp/main.md`)
+3. Generate a template content file (`tmp/mylocker.md`)
 4. Prompt you for a passphrase
 5. Encrypt the initial content
 
 After the script completes:
-1. Edit `tmp/main.md` with your actual secrets
+1. Edit `tmp/mylocker.md` with your actual secrets
 2. Re-encrypt: `bash encrypt.sh mylocker`
 3. Commit and deploy (see step 5 below)
 
@@ -139,7 +153,7 @@ If you prefer to do it manually:
 
 1. Create your secrets file:
    ```bash
-   echo "My secret content" > tmp/main.md
+   echo "My secret content" > tmp/mylocker.md
    ```
 
 2. Encrypt to a new locker:

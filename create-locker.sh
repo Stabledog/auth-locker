@@ -38,7 +38,7 @@ CONTENT_FILE="$LOCKER_DIR/content.txt"
 INDEX_FILE="$LOCKER_DIR/index.html"
 TEMPLATE_FILE="docs/locker.html"
 TMP_DIR="tmp"
-TMP_FILE="$TMP_DIR/main.md"
+TMP_FILE="$TMP_DIR/$LOCKER_NAME.md"
 
 echo -e "${BLUE}=== Auth Locker - Create New Locker ===${NC}"
 echo
