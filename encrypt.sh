@@ -23,10 +23,8 @@ ENCRYPTOR="encrypt-for-embed.js"
 
 if [ -n "$LOCKER_NAME" ]; then
     OUTPUT_FILE="docs/lockers/$LOCKER_NAME/content.txt"
-    LOCKER_ARG="--locker $LOCKER_NAME"
 else
     OUTPUT_FILE="docs/content.txt"
-    LOCKER_ARG=""
 fi
 
 echo "=== Auth Locker Encryption Wrapper ==="
@@ -81,7 +79,11 @@ fi
 echo
 
 # Run the encryptor
-node "$ENCRYPTOR" "$INPUT_FILE" $LOCKER_ARG
+if [ -n "$LOCKER_NAME" ]; then
+    node "$ENCRYPTOR" "$INPUT_FILE" --locker "$LOCKER_NAME"
+else
+    node "$ENCRYPTOR" "$INPUT_FILE"
+fi
 
 # Check if encryption succeeded
 if [ $? -eq 0 ] && [ -f "$OUTPUT_FILE" ]; then

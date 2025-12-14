@@ -305,13 +305,10 @@
       return lockerName;
     }
 
-    // Get content.txt path based on locker name
+    // Get content.txt path - always relative to current directory
+    // since this template is copied into each locker directory as index.html
     function getContentPath() {
-      const lockerName = getLockerName();
-      if (lockerName) {
-        return 'content.txt'; // Relative to the locker directory
-      }
-      return 'content.txt'; // Default location
+      return 'content.txt'; // Always relative to the locker directory
     }
 
     // Update subtitle with locker name
