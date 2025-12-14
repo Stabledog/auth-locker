@@ -111,7 +111,7 @@ This is your new encrypted locker. Edit this file to add your secrets, then re-e
 
 ## Instructions
 1. Edit this file with your secrets
-2. Run: bash encrypt.sh $LOCKER_NAME
+2. Run: bash encrypt.sh "$LOCKER_NAME"
 3. Commit and push to deploy
 4. Access at: https://yourdomain.github.io/auth-locker/$LOCKER_NAME/
 
@@ -159,10 +159,10 @@ echo "1. Edit your secrets:"
 echo "   Open $TMP_FILE in your editor"
 echo
 echo "2. Re-encrypt when ready:"
-echo "   bash encrypt.sh $LOCKER_NAME"
+echo "   bash encrypt.sh \"$LOCKER_NAME\""
 echo
 echo "3. Deploy to GitHub Pages:"
-echo "   git add docs/lockers/$LOCKER_NAME/"
+echo "   git add \"docs/lockers/$LOCKER_NAME/\""
 echo "   git commit -m \"Add $LOCKER_NAME locker\""
 echo "   git push"
 echo
