@@ -1,8 +1,12 @@
 #!/bin/bash
 
-# Encrypts tmp/main.md into docs/content.txt.  Create the former and 
-# then run encrypt.sh.   When satisfied, a git commit + push will update
-# the published recovery page at https://stabledog.github.io/auth-locker
+# Encrypts tmp/main.md (or tmp/<locker-name>.md) into docs/content.txt (or docs/lockers/{name}/content.txt).
+# Create the former and then run encrypt.sh.   When satisfied, a git commit + push 
+# will update the published recovery page at https://stabledog.github.io/auth-locker
+#
+# Usage:
+#   bash encrypt.sh          # Encrypt to default locker (uses tmp/main.md → docs/content.txt)
+#   bash encrypt.sh sally    # Encrypt to named locker (uses tmp/sally.md → docs/lockers/sally/content.txt)
 
 set -e  # Exit on error
 
@@ -12,10 +16,17 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# File paths
-INPUT_FILE="tmp/main.md"
-OUTPUT_FILE="docs/content.txt"
+# Parse arguments
+LOCKER_NAME="$1"
 ENCRYPTOR="encrypt-for-embed.js"
+
+if [ -n "$LOCKER_NAME" ]; then
+    INPUT_FILE="tmp/$LOCKER_NAME.md"
+    OUTPUT_FILE="docs/lockers/$LOCKER_NAME/content.txt"
+else
+    INPUT_FILE="tmp/main.md"
+    OUTPUT_FILE="docs/content.txt"
+fi
 
 echo "=== Auth Locker Encryption Wrapper ==="
 echo
@@ -42,9 +53,15 @@ fi
 if [ ! -f "$INPUT_FILE" ]; then
     echo -e "${RED}✗ Error: $INPUT_FILE not found${NC}"
     echo
-    echo "Please create tmp/main.md with your secrets, for example:"
-    echo "  echo '# My Recovery Secrets' > tmp/main.md"
-    echo "  echo '1Password Secret Key: A3-...' >> tmp/main.md"
+    if [ -n "$LOCKER_NAME" ]; then
+        echo "Please create $INPUT_FILE with your secrets, for example:"
+        echo "  echo '# My Recovery Secrets for $LOCKER_NAME' > $INPUT_FILE"
+        echo "  echo '1Password Secret Key: A3-...' >> $INPUT_FILE"
+    else
+        echo "Please create tmp/main.md with your secrets, for example:"
+        echo "  echo '# My Recovery Secrets' > tmp/main.md"
+        echo "  echo '1Password Secret Key: A3-...' >> tmp/main.md"
+    fi
     echo
     exit 1
 fi
@@ -69,7 +86,11 @@ fi
 echo
 
 # Run the encryptor
-node "$ENCRYPTOR" "$INPUT_FILE"
+if [ -n "$LOCKER_NAME" ]; then
+    node "$ENCRYPTOR" "$INPUT_FILE" --locker "$LOCKER_NAME"
+else
+    node "$ENCRYPTOR" "$INPUT_FILE"
+fi
 
 # Check if encryption succeeded
 if [ $? -eq 0 ] && [ -f "$OUTPUT_FILE" ]; then
@@ -77,12 +98,18 @@ if [ $? -eq 0 ] && [ -f "$OUTPUT_FILE" ]; then
     echo -e "${GREEN}✓ Encryption complete!${NC}"
     echo
     echo "Next steps:"
-    echo "  1. Commit and push docs/content.txt"
-    echo "  2. Wait a few minutes for GitHub Pages to deploy"
-    echo "  3. Test decryption at http://stabledog.github.io/auth-locker"
+    if [ -n "$LOCKER_NAME" ]; then
+        echo "  1. Commit and push docs/lockers/$LOCKER_NAME/content.txt"
+        echo "  2. Wait a few minutes for GitHub Pages to deploy"
+        echo "  3. Test decryption at http://stabledog.github.io/auth-locker/$LOCKER_NAME/"
+    else
+        echo "  1. Commit and push docs/content.txt"
+        echo "  2. Wait a few minutes for GitHub Pages to deploy"
+        echo "  3. Test decryption at http://stabledog.github.io/auth-locker"
+    fi
     echo
     echo -e "${YELLOW}⚠ Security reminders:${NC}"
-    echo "  - Deleting tmp/main.md: rm $INPUT_FILE"
+    echo "  - Deleting $INPUT_FILE: rm $INPUT_FILE"
     echo "  - The passphrase is NOT stored anywhere"
     echo "  - Remember your passphrase or you cannot decrypt"
     echo "  - After emergency use, rotate all exposed credentials"
