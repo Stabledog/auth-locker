@@ -11,13 +11,33 @@ You can now create multiple independent encrypted lockers, each with its own pas
 
 ## Quick Start
 
+### Creating a New Locker (Recommended)
+
+Use the `create-locker.sh` script to automatically set up a new locker:
+
+```bash
+bash create-locker.sh mylocker
+```
+
+This will:
+1. Create the locker directory structure
+2. Generate a template content file
+3. Prompt you to create a passphrase
+4. Encrypt the initial content
+5. Set up the UI (index.html)
+
+Then you can edit `tmp/main.md` with your actual secrets and re-encrypt:
+```bash
+bash encrypt.sh mylocker
+```
+
 ### Default Locker
 ```bash
 bash encrypt.sh
 ```
 Access at: https://stabledog.github.io/auth-locker/
 
-### Named Lockers
+### Named Lockers (Manual Method)
 ```bash
 bash encrypt.sh sally
 bash encrypt.sh banking
@@ -92,6 +112,30 @@ Each locker has its own passphrase and encrypted content file.
    ```
 
 ## Creating a New Locker
+
+### Automated Method (Recommended)
+
+Use the `create-locker.sh` script to set up everything automatically:
+
+```bash
+bash create-locker.sh mylocker
+```
+
+The script will:
+1. Create the directory structure (`docs/lockers/mylocker/`)
+2. Set up the UI (`index.html`)
+3. Generate a template content file (`tmp/main.md`)
+4. Prompt you for a passphrase
+5. Encrypt the initial content
+
+After the script completes:
+1. Edit `tmp/main.md` with your actual secrets
+2. Re-encrypt: `bash encrypt.sh mylocker`
+3. Commit and deploy (see step 5 below)
+
+### Manual Method
+
+If you prefer to do it manually:
 
 1. Create your secrets file:
    ```bash
