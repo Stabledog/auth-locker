@@ -1,8 +1,12 @@
 #!/bin/bash
 
-# Encrypts tmp/main.md into docs/content.txt.  Create the former and 
-# then run encrypt.sh.   When satisfied, a git commit + push will update
-# the published recovery page at https://stabledog.github.io/auth-locker
+# Encrypts tmp/main.md into docs/content.txt (or docs/lockers/{name}/content.txt).
+# Create the former and then run encrypt.sh.   When satisfied, a git commit + push 
+# will update the published recovery page at https://stabledog.github.io/auth-locker
+#
+# Usage:
+#   bash encrypt.sh          # Encrypt to default locker (docs/content.txt)
+#   bash encrypt.sh sally    # Encrypt to named locker (docs/lockers/sally/content.txt)
 
 set -e  # Exit on error
 
@@ -12,10 +16,18 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# File paths
+# Parse arguments
+LOCKER_NAME="$1"
 INPUT_FILE="tmp/main.md"
-OUTPUT_FILE="docs/content.txt"
 ENCRYPTOR="encrypt-for-embed.js"
+
+if [ -n "$LOCKER_NAME" ]; then
+    OUTPUT_FILE="docs/lockers/$LOCKER_NAME/content.txt"
+    LOCKER_ARG="--locker $LOCKER_NAME"
+else
+    OUTPUT_FILE="docs/content.txt"
+    LOCKER_ARG=""
+fi
 
 echo "=== Auth Locker Encryption Wrapper ==="
 echo
@@ -69,7 +81,7 @@ fi
 echo
 
 # Run the encryptor
-node "$ENCRYPTOR" "$INPUT_FILE"
+node "$ENCRYPTOR" "$INPUT_FILE" $LOCKER_ARG
 
 # Check if encryption succeeded
 if [ $? -eq 0 ] && [ -f "$OUTPUT_FILE" ]; then
@@ -77,9 +89,15 @@ if [ $? -eq 0 ] && [ -f "$OUTPUT_FILE" ]; then
     echo -e "${GREEN}✓ Encryption complete!${NC}"
     echo
     echo "Next steps:"
-    echo "  1. Commit and push docs/content.txt"
-    echo "  2. Wait a few minutes for GitHub Pages to deploy"
-    echo "  3. Test decryption at http://stabledog.github.io/auth-locker"
+    if [ -n "$LOCKER_NAME" ]; then
+        echo "  1. Commit and push docs/lockers/$LOCKER_NAME/content.txt"
+        echo "  2. Wait a few minutes for GitHub Pages to deploy"
+        echo "  3. Test decryption at http://stabledog.github.io/auth-locker/$LOCKER_NAME/"
+    else
+        echo "  1. Commit and push docs/content.txt"
+        echo "  2. Wait a few minutes for GitHub Pages to deploy"
+        echo "  3. Test decryption at http://stabledog.github.io/auth-locker"
+    fi
     echo
     echo -e "${YELLOW}⚠ Security reminders:${NC}"
     echo "  - Deleting tmp/main.md: rm $INPUT_FILE"

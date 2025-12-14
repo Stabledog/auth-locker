@@ -2,12 +2,13 @@
  * Encryption Script for Auth Locker
  * 
  * Encrypts plaintext using AES-256-GCM with PBKDF2 key derivation.
- * Outputs SALT_B64, IV_B64, and CT_B64 to docs/content.txt
+ * Outputs SALT_B64, IV_B64, and CT_B64 to docs/content.txt or docs/lockers/{name}/content.txt
  * 
  * Usage:
- *   node encrypt-for-embed.js                    # Interactive prompt
- *   node encrypt-for-embed.js plaintext.txt      # Encrypt file
- *   echo "secret text" | node encrypt-for-embed.js  # From stdin
+ *   node encrypt-for-embed.js                         # Interactive prompt, default locker
+ *   node encrypt-for-embed.js plaintext.txt           # Encrypt file, default locker
+ *   node encrypt-for-embed.js plaintext.txt --locker sally  # Encrypt to named locker
+ *   echo "secret text" | node encrypt-for-embed.js    # From stdin, default locker
  */
 
 const crypto = require('crypto');
@@ -22,7 +23,36 @@ const PBKDF2_DIGEST = 'sha256';
 const SALT_LENGTH = 16; // bytes
 const IV_LENGTH = 12; // bytes (96 bits for GCM)
 const CIPHER_ALGORITHM = 'aes-256-gcm';
-const OUTPUT_FILE = path.join(__dirname, 'docs', 'content.txt');
+
+/**
+ * Parse command-line arguments to extract locker name
+ */
+function parseArgs() {
+  const args = process.argv.slice(2);
+  let inputFile = null;
+  let lockerName = null;
+  
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--locker' && i + 1 < args.length) {
+      lockerName = args[i + 1];
+      i++; // skip next arg
+    } else if (!inputFile && !args[i].startsWith('--')) {
+      inputFile = args[i];
+    }
+  }
+  
+  return { inputFile, lockerName };
+}
+
+/**
+ * Get output file path based on locker name
+ */
+function getOutputPath(lockerName) {
+  if (lockerName) {
+    return path.join(__dirname, 'docs', 'lockers', lockerName, 'content.txt');
+  }
+  return path.join(__dirname, 'docs', 'content.txt');
+}
 
 /**
  * Prompts user for input via readline
@@ -71,15 +101,14 @@ async function promptPassword() {
 /**
  * Reads plaintext from various sources
  */
-async function getPlaintext() {
+async function getPlaintext(inputFile) {
   // Check if file argument provided
-  if (process.argv[2]) {
-    const filePath = process.argv[2];
-    if (!fs.existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`);
+  if (inputFile) {
+    if (!fs.existsSync(inputFile)) {
+      throw new Error(`File not found: ${inputFile}`);
     }
-    console.log(`Reading plaintext from: ${filePath}`);
-    return fs.readFileSync(filePath, 'utf8');
+    console.log(`Reading plaintext from: ${inputFile}`);
+    return fs.readFileSync(inputFile, 'utf8');
   }
 
   // Check if stdin has data (piped input)
@@ -141,19 +170,19 @@ function encryptData(plaintext, passphrase) {
 }
 
 /**
- * Writes encrypted data to docs/content.txt
+ * Writes encrypted data to the specified output file
  */
-function writeOutput(encryptedData) {
+function writeOutput(encryptedData, outputPath) {
   const outputContent = `SALT_B64=${encryptedData.saltB64}\nIV_B64=${encryptedData.ivB64}\nCT_B64=${encryptedData.ctB64}\n`;
   
-  // Ensure docs directory exists
-  const docsDir = path.dirname(OUTPUT_FILE);
-  if (!fs.existsSync(docsDir)) {
-    fs.mkdirSync(docsDir, { recursive: true });
+  // Ensure output directory exists
+  const outputDir = path.dirname(outputPath);
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  fs.writeFileSync(OUTPUT_FILE, outputContent, 'utf8');
-  console.log(`\n✓ Encrypted data written to: ${OUTPUT_FILE}`);
+  fs.writeFileSync(outputPath, outputContent, 'utf8');
+  console.log(`\n✓ Encrypted data written to: ${outputPath}`);
   console.log(`  Salt length: ${encryptedData.saltB64.length} chars (Base64)`);
   console.log(`  IV length: ${encryptedData.ivB64.length} chars (Base64)`);
   console.log(`  Ciphertext+Tag length: ${encryptedData.ctB64.length} chars (Base64)`);
@@ -166,8 +195,18 @@ async function main() {
   try {
     console.log('=== Auth Locker Encryption Tool ===\n');
 
+    // Parse command-line arguments
+    const { inputFile, lockerName } = parseArgs();
+    const outputPath = getOutputPath(lockerName);
+    
+    if (lockerName) {
+      console.log(`Locker name: ${lockerName}`);
+    } else {
+      console.log('Using default locker (docs/content.txt)');
+    }
+
     // Get plaintext
-    const plaintext = await getPlaintext();
+    const plaintext = await getPlaintext(inputFile);
     
     if (!plaintext || plaintext.trim().length === 0) {
       throw new Error('No plaintext provided');
@@ -182,13 +221,19 @@ async function main() {
     const encrypted = encryptData(plaintext, passphrase);
 
     // Write output
-    writeOutput(encrypted);
+    writeOutput(encrypted, outputPath);
 
     console.log('\n✓ Encryption complete!');
     console.log('\nNext steps:');
-    console.log('1. Commit docs/content.txt to your repository');
-    console.log('2. Deploy to GitHub Pages');
-    console.log('3. Access the decryptor and use the same passphrase');
+    if (lockerName) {
+      console.log(`1. Commit docs/lockers/${lockerName}/content.txt to your repository`);
+      console.log('2. Deploy to GitHub Pages');
+      console.log(`3. Access at https://yourdomain.github.io/auth-locker/${lockerName}/`);
+    } else {
+      console.log('1. Commit docs/content.txt to your repository');
+      console.log('2. Deploy to GitHub Pages');
+      console.log('3. Access the decryptor and use the same passphrase');
+    }
     
   } catch (error) {
     console.error(`\n✗ Error: ${error.message}`);
@@ -201,4 +246,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { encryptData, getPlaintext, promptPassword };
+module.exports = { encryptData, getPlaintext, promptPassword, parseArgs, getOutputPath };
