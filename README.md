@@ -30,14 +30,18 @@ This will:
 4. Encrypt the initial content
 5. Set up the UI (index.html)
 
-Then you can edit `tmp/mylocker.md` with your actual secrets and re-encrypt:
+Then you can edit `tmp/mylocker.md` with your actual secrets, re-encrypt, and check the result opens:
 ```bash
 bash encrypt.sh mylocker
+bash verify.sh mylocker
 ```
+
+`create-locker.sh` refuses to run on a locker that already has encrypted content or edited plaintext in `tmp/`. See "Creating a New Locker" below.
 
 ### Default Locker
 ```bash
 bash encrypt.sh
+bash verify.sh
 ```
 Uses `tmp/main.md` and access at: https://stabledog.github.io/auth-locker/
 
@@ -95,8 +99,24 @@ Each locker has its own passphrase and encrypted content file.
    - Show file size/lines
    - Ask for confirmation
    - Encrypt `tmp/main.md` → `docs/content.txt` (or `docs/lockers/{name}/content.txt`)
+   - Fail, and say so, if the output file was not actually rewritten
 
-5. **Deploy**:
+5. **Verify before committing**:
+
+   ```bash
+   bash verify.sh          # default locker
+   bash verify.sh sally    # named locker
+   ```
+
+   Type the passphrase you just used. It decrypts the new `content.txt` the same way the
+   web page does and tells you plainly:
+   - `OPENS: yes` or `OPENS: NO`: whether the file decrypts with that passphrase
+   - `MATCHES: yes` or `MATCHES: NO`: whether the decrypted text is identical to `tmp/main.md`
+     (or `tmp/<name>.md`). It shows `not checked` if you've already deleted that file.
+
+   It never prints your secrets. Don't commit unless it says `OPENS: yes` and `MATCHES: yes`.
+
+6. **Deploy**:
    
    For default locker:
    ```bash
@@ -112,11 +132,11 @@ Each locker has its own passphrase and encrypted content file.
    git push
    ```
 
-6. **Test**:
+7. **Test**:
    - Wait for GitHub Pages to deploy (~2-5 minutes)
    - Test decryption at the appropriate URL
 
-7. **Clean up** (recommended):
+8. **Clean up** (recommended):
    ```bash
    # For default locker
    rm tmp/main.md
@@ -145,7 +165,18 @@ The script will:
 After the script completes:
 1. Edit `tmp/mylocker.md` with your actual secrets
 2. Re-encrypt: `bash encrypt.sh mylocker`
-3. Commit and deploy (see step 5 below)
+3. Check it opens: `bash verify.sh mylocker`
+4. Commit and deploy (see step 6 above)
+
+**Existing lockers are protected.** If `docs/lockers/mylocker/content.txt` already exists, or
+`tmp/mylocker.md` holds anything other than the untouched starter template, the script stops
+without changing anything. To change an existing locker's secrets, edit `tmp/mylocker.md` and run
+`encrypt.sh` instead. To refresh only its page, run `cp docs/locker.html docs/lockers/mylocker/index.html`.
+
+To really start a locker over, run `bash create-locker.sh --force mylocker` at a terminal and type
+the locker name when asked. The old plaintext is moved to `tmp/mylocker.md.bak.<timestamp>`
+and the old `content.txt` is copied to `tmp/mylocker.content.txt.bak.<timestamp>`. Both are in
+`tmp/`, which is gitignored and never published.
 
 ### Manual Method
 
@@ -156,9 +187,10 @@ If you prefer to do it manually:
    echo "My secret content" > tmp/mylocker.md
    ```
 
-2. Encrypt to a new locker:
+2. Encrypt to a new locker, then check it opens:
    ```bash
    bash encrypt.sh mylocker
+   bash verify.sh mylocker
    ```
 
 3. Copy the locker template (one-time setup per locker):
