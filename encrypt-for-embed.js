@@ -5,10 +5,11 @@
  * Outputs SALT_B64, IV_B64, and CT_B64 to docs/content.txt or docs/lockers/{name}/content.txt
  * 
  * Usage:
- *   node encrypt-for-embed.js                         # Interactive prompt, default locker
  *   node encrypt-for-embed.js plaintext.txt           # Encrypt file, default locker
  *   node encrypt-for-embed.js plaintext.txt --locker sally  # Encrypt to named locker
- *   echo "secret text" | node encrypt-for-embed.js    # From stdin, default locker
+ *
+ * The plaintext must come from a file: stdin is reserved for the passphrase.
+ * Exits nonzero, without touching the output file, if anything goes wrong.
  */
 
 const crypto = require('crypto');
@@ -55,79 +56,68 @@ function getOutputPath(lockerName) {
 }
 
 /**
- * Prompts user for input via readline
+ * Asks each question in turn on stdin and resolves with the answers.
+ * Rejects if stdin ends (Ctrl-D, EOF, an exhausted pipe) before every
+ * question is answered, so a missing answer can never pass silently.
  */
-function prompt(question) {
+function askLines(questions) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
   });
-  
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    });
-  });
-}
-
-/**
- * Prompts for password with confirmation (hidden input)
- */
-async function promptPassword() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout
-  });
+  const answers = [];
+  let settled = false;
 
   return new Promise((resolve, reject) => {
-    rl.question('Enter passphrase: ', (pass1) => {
-      // Simple hidden input simulation (still visible but prompts twice)
-      rl.question('Confirm passphrase: ', (pass2) => {
+    rl.on('line', (line) => {
+      if (settled) return;
+      answers.push(line);
+      if (answers.length === questions.length) {
+        settled = true;
         rl.close();
-        
-        if (pass1 !== pass2) {
-          reject(new Error('Passphrases do not match'));
-        } else if (pass1.length === 0) {
-          reject(new Error('Passphrase cannot be empty'));
-        } else {
-          resolve(pass1);
-        }
-      });
+        resolve(answers);
+      } else {
+        rl.setPrompt(questions[answers.length]);
+        rl.prompt();
+      }
     });
+    rl.on('close', () => {
+      if (settled) return;
+      settled = true;
+      process.stdout.write('\n');
+      reject(new Error('Input ended before a passphrase was entered.'));
+    });
+    rl.setPrompt(questions[0]);
+    rl.prompt();
   });
 }
 
 /**
- * Reads plaintext from various sources
+ * Prompts for password with confirmation (input is still visible)
+ */
+async function promptPassword() {
+  const [pass1, pass2] = await askLines(['Enter passphrase: ', 'Confirm passphrase: ']);
+  if (pass1 !== pass2) {
+    throw new Error('Passphrases do not match');
+  }
+  if (pass1.length === 0) {
+    throw new Error('Passphrase cannot be empty');
+  }
+  return pass1;
+}
+
+/**
+ * Reads plaintext from the input file
  */
 async function getPlaintext(inputFile) {
-  // Check if file argument provided
-  if (inputFile) {
-    if (!fs.existsSync(inputFile)) {
-      throw new Error(`File not found: ${inputFile}`);
-    }
-    console.log(`Reading plaintext from: ${inputFile}`);
-    return fs.readFileSync(inputFile, 'utf8');
+  if (!inputFile) {
+    throw new Error('No plaintext file given. Usage: node encrypt-for-embed.js <plaintext-file> [--locker <name>]');
   }
-
-  // Check if stdin has data (piped input)
-  if (!process.stdin.isTTY) {
-    console.log('Reading plaintext from stdin...');
-    const chunks = [];
-    for await (const chunk of process.stdin) {
-      chunks.push(chunk);
-    }
-    return Buffer.concat(chunks).toString('utf8');
+  if (!fs.existsSync(inputFile)) {
+    throw new Error(`File not found: ${inputFile}`);
   }
-
-  // Interactive prompt
-  console.log('Enter plaintext (press Ctrl+D when done, or Ctrl+C to cancel):');
-  const chunks = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks).toString('utf8');
+  console.log(`Reading plaintext from: ${inputFile}`);
+  return fs.readFileSync(inputFile, 'utf8');
 }
 
 /**
@@ -181,7 +171,15 @@ function writeOutput(encryptedData, outputPath) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  fs.writeFileSync(outputPath, outputContent, 'utf8');
+  // Write a temp file and rename it over the target, so the target is either
+  // fully replaced or left exactly as it was.
+  const tmpPath = `${outputPath}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(tmpPath, outputContent, 'utf8');
+    fs.renameSync(tmpPath, outputPath);
+  } finally {
+    if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath);
+  }
   console.log(`\n✓ Encrypted data written to: ${outputPath}`);
   console.log(`  Salt length: ${encryptedData.saltB64.length} chars (Base64)`);
   console.log(`  IV length: ${encryptedData.ivB64.length} chars (Base64)`);
@@ -192,6 +190,9 @@ function writeOutput(encryptedData, outputPath) {
  * Main execution
  */
 async function main() {
+  // Fail unless we reach the end: if the event loop ever drains early, the
+  // exit code is nonzero rather than a silent 0.
+  process.exitCode = 1;
   try {
     console.log('=== Auth Locker Encryption Tool ===\n');
 
@@ -226,15 +227,18 @@ async function main() {
     console.log('\n✓ Encryption complete!');
     console.log('\nNext steps:');
     if (lockerName) {
-      console.log(`1. Commit docs/lockers/${lockerName}/content.txt to your repository`);
-      console.log('2. Deploy to GitHub Pages');
-      console.log(`3. Access at https://yourdomain.github.io/auth-locker/${lockerName}/`);
+      console.log(`1. Check it opens: bash verify.sh ${lockerName}`);
+      console.log(`2. Commit docs/lockers/${lockerName}/content.txt to your repository`);
+      console.log('3. Deploy to GitHub Pages');
+      console.log(`4. Access at https://yourdomain.github.io/auth-locker/${lockerName}/`);
     } else {
-      console.log('1. Commit docs/content.txt to your repository');
-      console.log('2. Deploy to GitHub Pages');
-      console.log('3. Access the decryptor and use the same passphrase');
+      console.log('1. Check it opens: bash verify.sh');
+      console.log('2. Commit docs/content.txt to your repository');
+      console.log('3. Deploy to GitHub Pages');
+      console.log('4. Access the decryptor and use the same passphrase');
     }
-    
+    process.exitCode = 0;
+
   } catch (error) {
     console.error(`\n✗ Error: ${error.message}`);
     process.exit(1);
@@ -246,4 +250,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { encryptData, getPlaintext, promptPassword, parseArgs, getOutputPath };
+module.exports = { encryptData, getPlaintext, promptPassword, askLines, parseArgs, getOutputPath, PBKDF2_ITERATIONS };
