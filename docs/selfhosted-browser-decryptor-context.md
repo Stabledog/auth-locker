@@ -20,7 +20,7 @@ Provide a zero-install, cross-platform recovery path for critical secrets (e.g.,
 ## Crypto Parameters
 | Item | Choice | Notes |
 |------|---------|-------|
-| KDF  | PBKDF2-HMAC-SHA256 | 200 000 iterations (configurable) |
+| KDF  | PBKDF2-HMAC-SHA256 | count recorded per file (`ITER=`); new files use `NEW_FILE_ITERATIONS` in `docs/locker.html` |
 | Cipher | AES-256-GCM | 12-byte IV, 16-byte tag |
 | Salt | 16 bytes random | stored Base64 in content.txt |
 | Encoding | Base64 for salt / iv / ciphertext (+ tag) | Each Base64 string on its own line in content.txt; ciphertext line length depends on plaintext size |

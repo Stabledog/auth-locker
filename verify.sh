@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # verify.sh — Check that a freshly encrypted content.txt opens, before you commit it.
 #
-# Prompts for the passphrase, decrypts docs/content.txt (or
-# docs/lockers/<name>/content.txt) exactly as the published page would, and
-# reports whether it opens. If tmp/main.md (or tmp/<name>.md) is still there,
+# Checks that the page serving the locker is the current docs/locker.html,
+# then prompts for the passphrase, decrypts docs/content.txt (or
+# docs/lockers/<name>/content.txt) with that page's own code, and reports
+# whether it opens. If tmp/main.md (or tmp/<name>.md) is still there,
 # also reports whether the decrypted content matches it. Never prints secrets.
 #
 # Run it after encrypt.sh and before git commit.
 #
 # Usage:
 #   bash verify.sh          # Default locker: docs/content.txt vs tmp/main.md
-#   bash verify.sh sally    # Named locker: docs/lockers/sally/content.txt vs tmp/sally.md
+#   bash verify.sh mylocker # Named locker: docs/lockers/mylocker/content.txt vs tmp/mylocker.md
 #
 # Exit code: 0 if it opens (and matches, when the plaintext is present); 1 otherwise.
 set -ue
@@ -24,6 +25,7 @@ set -o pipefail
 scriptName="${scriptName:-"$(command readlink -f -- "$0")"}"
 
 VERIFIER="verify-content.js"
+TEMPLATE_FILE="docs/locker.html"
 
 die() {
     builtin echo "ERROR($(basename "${scriptName}")): $*" >&2
@@ -54,14 +56,11 @@ main() {
     [[ -f "$VERIFIER" ]] || die "$VERIFIER not found (run this from the repo root)"
     [[ -f "$content_file" ]] || die "$content_file not found"
 
-    local -a args=("$content_file" --plaintext "$plaintext_file")
-    if [[ -f "$page_file" ]]; then
-        args+=(--page "$page_file")
-    else
-        echo "Note: $page_file not found; checking with the encryptor's iteration count."
-    fi
+    [[ -f "$page_file" ]] || die "$page_file not found. Run: bash sync-pages.sh"
+    cmp -s "$page_file" "$TEMPLATE_FILE" \
+        || die "$page_file is not the current decryptor ($TEMPLATE_FILE). Run: bash sync-pages.sh"
 
-    node "$VERIFIER" "${args[@]}"
+    node "$VERIFIER" "$content_file" --plaintext "$plaintext_file"
 }
 
 if [[ -z "${sourceMe:-}" ]]; then
