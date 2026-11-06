@@ -38,7 +38,8 @@ die() {
         local dir
         dir="$(mktemp -d "${SCRATCH_ROOT}/case.XXXXXX")"
         local f
-        for f in encrypt.sh create-locker.sh encrypt-for-embed.js verify.sh verify-content.js; do
+        for f in encrypt.sh create-locker.sh encrypt-for-embed.js verify.sh verify-content.js \
+                locker-core.js sync-pages.sh; do
             [[ -f "${REPO_DIR}/${f}" ]] && cp "${REPO_DIR}/${f}" "${dir}/"
         done
         cp -r "${REPO_DIR}/docs" "${dir}/docs"
@@ -109,6 +110,42 @@ die() {
         local found
         found="$(find docs -name '*backup*' -o -name '*.bak*' -o -name '*.tmp-*' | head -n 1)"
         if [[ -z "${found}" ]]; then ok "$1"; else bad "$1 (found ${found})"; fi
+    }
+
+    expect_file_has() {
+        if grep -q -- "$3" "$2" 2>/dev/null; then ok "$1"; else bad "$1 ($2 lacks: $3)"; fi
+    }
+
+    # A locker that already has encrypted content (the format-1 test fixture,
+    # passphrase pw-format1) and the current page.
+    make_existing_locker() {
+        local name="$1"
+        mkdir -p "docs/lockers/${name}"
+        cp docs/locker.html "docs/lockers/${name}/index.html"
+        cp "${REPO_DIR}/test/fixtures/format1-content.txt" "docs/lockers/${name}/content.txt"
+    }
+
+    # make_v2_content <file> <iterations> <passphrase>: encrypts tmp/main.md
+    # into a format-2 content file, independently of the repo's encryptor.
+    # Keep the passphrase ASCII: Windows node mangles non-ASCII arguments.
+    make_v2_content() {
+        node -e '
+            const c = require("crypto"), fs = require("fs");
+            const [file, iter, pass] = process.argv.slice(1);
+            const salt = c.randomBytes(16), iv = c.randomBytes(12);
+            const key = c.pbkdf2Sync(pass, salt, Number(iter), 32, "sha256");
+            const ci = c.createCipheriv("aes-256-gcm", key, iv);
+            const ct = Buffer.concat([ci.update(fs.readFileSync("tmp/main.md")), ci.final(), ci.getAuthTag()]);
+            fs.writeFileSync(file, "V=2\nITER=" + iter + "\nSALT_B64=" + salt.toString("base64") +
+                "\nIV_B64=" + iv.toString("base64") + "\nCT_B64=" + ct.toString("base64") + "\n");
+        ' "$@"
+    }
+
+    # core_eval <js>: runs js with `core` bound to the page's locker-core;
+    # sets OUT and RC like run.
+    core_eval() {
+        RC=0
+        OUT="$(node -e "const core = require('./locker-core.js').load(); $1" 2>&1)" || RC=$?
     }
 
     # ---- H2: encryption must never silently do nothing ----
@@ -195,39 +232,51 @@ die() {
     test_h3_refuses_real_plaintext() {
         echo "H3: create-locker.sh on a locker with real plaintext in tmp/"
         setup
-        printf 'REAL SALLY SECRETS\n' >tmp/sally.md
+        make_existing_locker existing
+        printf 'REAL SECRETS
+' >tmp/existing.md
         local before_tmp before_ct
-        before_tmp="$(hash_of tmp/sally.md)"
-        before_ct="$(hash_of docs/lockers/sally/content.txt)"
-        run 'ypw\npw\n' bash create-locker.sh sally
+        before_tmp="$(hash_of tmp/existing.md)"
+        before_ct="$(hash_of docs/lockers/existing/content.txt)"
+        run 'ypw
+pw
+' bash create-locker.sh existing
         expect_rc_nonzero "create-locker.sh refuses"
-        expect_same "tmp/sally.md untouched" "${before_tmp}" "$(hash_of tmp/sally.md)"
-        expect_same "sally content.txt untouched" "${before_ct}" "$(hash_of docs/lockers/sally/content.txt)"
+        expect_same "tmp/existing.md untouched" "${before_tmp}" "$(hash_of tmp/existing.md)"
+        expect_same "existing content.txt untouched" "${before_ct}" "$(hash_of docs/lockers/existing/content.txt)"
         expect_no_backup_in_docs "no backup written under docs/"
     }
 
     test_h3_refuses_existing_content() {
         echo "H3: create-locker.sh on a locker with encrypted content, no tmp file"
         setup
+        make_existing_locker existing
         local before_ct
-        before_ct="$(hash_of docs/lockers/sally/content.txt)"
-        run 'ypw\npw\n' bash create-locker.sh sally
+        before_ct="$(hash_of docs/lockers/existing/content.txt)"
+        run 'ypw
+pw
+' bash create-locker.sh existing
         expect_rc_nonzero "create-locker.sh refuses"
-        expect_same "sally content.txt untouched" "${before_ct}" "$(hash_of docs/lockers/sally/content.txt)"
+        expect_same "existing content.txt untouched" "${before_ct}" "$(hash_of docs/lockers/existing/content.txt)"
         expect_no_backup_in_docs "no backup written under docs/"
     }
 
     test_h3_force_needs_terminal() {
         echo "H3: --force without an interactive terminal is refused"
         setup
-        printf 'REAL SALLY SECRETS\n' >tmp/sally.md
+        make_existing_locker existing
+        printf 'REAL SECRETS
+' >tmp/existing.md
         local before_tmp before_ct
-        before_tmp="$(hash_of tmp/sally.md)"
-        before_ct="$(hash_of docs/lockers/sally/content.txt)"
-        run 'sally\nypw\npw\n' bash create-locker.sh --force sally
+        before_tmp="$(hash_of tmp/existing.md)"
+        before_ct="$(hash_of docs/lockers/existing/content.txt)"
+        run 'existing
+ypw
+pw
+' bash create-locker.sh --force existing
         expect_rc_nonzero "create-locker.sh --force refuses without a terminal"
-        expect_same "tmp/sally.md untouched" "${before_tmp}" "$(hash_of tmp/sally.md)"
-        expect_same "sally content.txt untouched" "${before_ct}" "$(hash_of docs/lockers/sally/content.txt)"
+        expect_same "tmp/existing.md untouched" "${before_tmp}" "$(hash_of tmp/existing.md)"
+        expect_same "existing content.txt untouched" "${before_ct}" "$(hash_of docs/lockers/existing/content.txt)"
         expect_no_backup_in_docs "no backup written under docs/"
     }
 
@@ -320,11 +369,168 @@ die() {
         expect_no_out "does not claim it opens" "OPENS: yes"
     }
 
-    test_verify_existing_published_locker() {
-        echo "verify: reads the published page's iteration count"
+    test_verify_existing_format1_locker() {
+        echo "verify: a locker encrypted before this format change still opens"
         setup
-        run 'not-it\n' bash verify.sh sally
-        expect_out "names the page it checked against" "docs/lockers/sally/index.html"
+        make_existing_locker existing
+        cp "${REPO_DIR}/test/lorem-1.txt" tmp/existing.md
+        run 'pw-format1\n' bash verify.sh existing
+        expect_rc_zero "verify succeeds"
+        expect_out "reports it opens" "OPENS: yes"
+        expect_out "reports it matches" "MATCHES: yes"
+    }
+
+    # ---- M5: one source for the iteration count ----
+
+    test_m5_count_recorded_in_file() {
+        echo "M5: the encryptor records the format and iteration count in content.txt"
+        setup
+        encrypt_main
+        expect_rc_zero "encrypt.sh succeeds"
+        expect_file_has "content.txt has a V=2 line" docs/content.txt '^V=2$'
+        expect_file_has "content.txt has an ITER= line" docs/content.txt '^ITER=[0-9][0-9]*$'
+    }
+
+    test_m5_verify_uses_file_count() {
+        echo "M5: verify.sh uses the count recorded in the file, not its own copy"
+        setup
+        cp "${REPO_DIR}/test/lorem-1.txt" tmp/main.md
+        make_v2_content docs/content.txt 150000 pw-iter
+        run 'pw-iter\n' bash verify.sh
+        expect_rc_zero "verify succeeds"
+        expect_out "reports it opens" "OPENS: yes"
+        expect_out "names the count it used" "150000 iterations"
+    }
+
+    test_m5_no_stray_copies() {
+        echo "M5: no script outside the decryptor page hardcodes an iteration count"
+        local hits
+        hits="$(grep -l -E '[0-9]{5,}' "${REPO_DIR}"/*.js "${REPO_DIR}"/*.sh 2>/dev/null || true)"
+        OUT="${hits}"
+        if [[ -z "${hits}" ]]; then ok "no iteration literals in *.js / *.sh"; else bad "no iteration literals in *.js / *.sh"; fi
+    }
+
+    test_m5_published_files_parse() {
+        echo "M5: every published content.txt parses with the page's own code"
+        setup
+        core_eval '
+            const fs = require("fs"), path = require("path");
+            const files = ["docs/content.txt"].concat(fs.readdirSync("docs/lockers")
+                .map((d) => path.join("docs/lockers", d, "content.txt")).filter(fs.existsSync));
+            for (const f of files) {
+                const c = core.parseContent(fs.readFileSync(f, "utf8"));
+                console.log(f + ": format " + c.version + ", " + c.iterations + " iterations");
+            }'
+        expect_rc_zero "all published files parse"
+        expect_out "the main locker parses" "docs/content.txt: format"
+    }
+
+    # ---- L1: the same passphrase typed differently still opens ----
+
+    test_l1_nfd_typed_passphrase() {
+        echo "L1: passphrase typed precomposed (NFC) at encrypt, decomposed (NFD) at verify"
+        setup
+        cp "${REPO_DIR}/test/lorem-1.txt" tmp/main.md
+        run 'ycaf\xc3\xa9-pw\ncaf\xc3\xa9-pw\n' bash encrypt.sh
+        expect_rc_zero "encrypt.sh succeeds"
+        run 'cafe\xcc\x81-pw\n' bash verify.sh
+        expect_rc_zero "verify succeeds"
+        expect_out "reports it opens" "OPENS: yes"
+    }
+
+    test_l1_trailing_space_typed() {
+        echo "L1: a stray space added by the keyboard does not lock you out"
+        setup
+        encrypt_main
+        run 'pw-alpha \n' bash verify.sh
+        expect_rc_zero "verify succeeds"
+        expect_out "reports it opens" "OPENS: yes"
+    }
+
+    test_l1_encryptor_rejects_edge_spaces() {
+        echo "L1: the encryptor refuses a passphrase that starts or ends with a space"
+        setup
+        cp "${REPO_DIR}/test/lorem-1.txt" tmp/main.md
+        local before
+        before="$(hash_of docs/content.txt)"
+        run 'ypw-alpha \npw-alpha \n' bash encrypt.sh
+        expect_rc_nonzero "encrypt.sh fails"
+        expect_same "docs/content.txt untouched" "${before}" "$(hash_of docs/content.txt)"
+    }
+
+    test_l1_page_field_no_autocorrect() {
+        echo "L1: the page's passphrase field turns off autocapitalize / autocorrect"
+        expect_file_has "autocapitalize off" "${REPO_DIR}/docs/locker.html" 'autocapitalize="none"'
+        expect_file_has "autocorrect off" "${REPO_DIR}/docs/locker.html" 'autocorrect="off"'
+        expect_file_has "spellcheck off" "${REPO_DIR}/docs/locker.html" 'spellcheck="false"'
+    }
+
+    # ---- L3: base64 padding survives parsing ----
+
+    test_l3_padding_kept() {
+        echo "L3: the page's parser keeps base64 padding and rejects damaged fields"
+        setup
+        cp "${REPO_DIR}/test/fixtures/format1-content.txt" tmp/fixture.txt
+        # shellcheck disable=SC2016  # $1 is a JS regex backreference
+        core_eval '
+            const fs = require("fs");
+            const text = fs.readFileSync("tmp/fixture.txt", "utf8");
+            const c = core.parseContent(text);
+            if (c.salt.length !== 16) throw new Error("salt is " + c.salt.length + " bytes, expected 16");
+            let rejected = false;
+            try { core.parseContent(text.replace(/^(SALT_B64=.*?)=+$/m, "$1")); } catch { rejected = true; }
+            if (!rejected) throw new Error("salt with its padding cut off was accepted");
+            console.log("padding ok");'
+        expect_rc_zero "parser checks pass"
+        expect_out "padding kept" "padding ok"
+        local hits
+        hits="$(grep -l "split('=')" "${REPO_DIR}"/docs/*.html "${REPO_DIR}"/docs/lockers/*/index.html 2>/dev/null || true)"
+        OUT="${hits}"
+        if [[ -z "${hits}" ]]; then ok "no page splits on every ="; else bad "no page splits on every ="; fi
+    }
+
+    # ---- L2: one decryptor page ----
+
+    test_l2_pages_identical() {
+        echo "L2: every published decryptor page is the same file as docs/locker.html"
+        local page drift=""
+        for page in "${REPO_DIR}"/docs/index.html "${REPO_DIR}"/docs/lockers/*/index.html; do
+            cmp -s "${page}" "${REPO_DIR}/docs/locker.html" || drift+="${page#"${REPO_DIR}"/} "
+        done
+        OUT="${drift}"
+        if [[ -z "${drift}" ]]; then ok "no drifted pages"; else bad "no drifted pages"; fi
+    }
+
+    test_l2_verify_refuses_drifted_page() {
+        echo "L2: verify.sh refuses when the page serving the locker has drifted"
+        setup
+        encrypt_main
+        printf '<!-- local edit -->\n' >>docs/index.html
+        run 'pw-alpha\n' bash verify.sh
+        expect_rc_nonzero "verify fails"
+        expect_out "points at sync-pages.sh" "sync-pages.sh"
+    }
+
+    test_l2_sync_pages() {
+        echo "L2: sync-pages.sh brings every page back in line with docs/locker.html"
+        setup
+        make_existing_locker existing
+        printf '<!-- local edit -->\n' >>docs/index.html
+        printf '<!-- local edit -->\n' >>docs/lockers/existing/index.html
+        run_no_stdin bash sync-pages.sh
+        expect_rc_zero "sync-pages.sh succeeds"
+        expect_same "root page synced" "$(hash_of docs/locker.html)" "$(hash_of docs/index.html)"
+        expect_same "locker page synced" "$(hash_of docs/locker.html)" "$(hash_of docs/lockers/existing/index.html)"
+        run_no_stdin bash sync-pages.sh --check
+        expect_rc_zero "--check passes once synced"
+    }
+
+    # ---- Housekeeping ----
+
+    test_housekeeping_removed() {
+        echo "Housekeeping: proof-of-concept data.txt and the bot-made sally locker are gone"
+        if [[ ! -e "${REPO_DIR}/docs/data.txt" ]]; then ok "docs/data.txt removed"; else bad "docs/data.txt removed"; fi
+        if [[ ! -e "${REPO_DIR}/docs/lockers/sally" ]]; then ok "sally locker removed"; else bad "sally locker removed"; fi
     }
 
 }
