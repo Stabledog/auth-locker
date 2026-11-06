@@ -243,7 +243,7 @@
   <div class="container">
     <header>
       <h1>🔐 Auth Locker</h1>
-      <p class="subtitle">Secret Recovery Tool</p>
+      <p class="subtitle" id="subtitle">Secret Recovery Tool</p>
     </header>
 
     <div class="status" id="status"></div>
@@ -256,6 +256,9 @@
           id="passphrase" 
           placeholder="Enter your recovery passphrase"
           autocomplete="off"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
           aria-label="Recovery passphrase">
         <button class="toggle-password" id="togglePassword" type="button" aria-label="Toggle password visibility">
           👁️
@@ -283,12 +286,163 @@
   </div>
 
   <script>
-    // Crypto parameters (must match encryption script)
-    const PBKDF2_ITERATIONS = 200000;
-    const PBKDF2_KEYLEN = 256; // bits
-    const PBKDF2_HASH = 'SHA-256';
-    const GCM_TAG_LENGTH = 16; // bytes
+    // BEGIN locker-core
+    // The content.txt format and the decrypt steps live here and only here.
+    // The Node tools load this block out of docs/locker.html (locker-core.js),
+    // so encrypt.sh, verify.sh and this page cannot disagree. No DOM code here.
+    //
+    // content.txt, format 2 (what encrypt.sh writes):
+    //   V=2
+    //   ITER=<PBKDF2-SHA256 iterations used for this file>
+    //   SALT_B64=...  IV_B64=...  CT_B64=...  (CT is ciphertext + 16-byte GCM tag)
+    // The key is derived from the passphrase with spaces trimmed from both ends
+    // and Unicode-normalized to NFC, so the same passphrase typed on another
+    // device or keyboard gives the same key.
+    //
+    // Format 1 (no V= line) is the original: 200000 iterations, passphrase used
+    // exactly as typed. Files in that format keep opening.
+
+    // Iterations for newly encrypted files. Changing it affects only files
+    // encrypted afterwards, because each file records its own count.
+    const NEW_FILE_ITERATIONS = 600000;
+    const FORMAT1_ITERATIONS = 200000;
+    const MIN_ITERATIONS = 100000;
+    const FORMAT_VERSION = 2;
+    const CONTENT_FIELDS = ['V', 'ITER', 'SALT_B64', 'IV_B64', 'CT_B64'];
+
+    // Strict base64: a field that lost its padding or was cut short is an
+    // error, not a quietly different value.
+    function base64ToBytes(name, base64) {
+      if (base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) {
+        throw new Error(`content.txt field ${name} is damaged (not valid base64)`);
+      }
+      const binary = atob(base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    // Parses content.txt into { version, iterations, salt, iv, ciphertext }.
+    function parseContent(text) {
+      const data = {};
+      for (const raw of text.split('\n')) {
+        const line = raw.trim();
+        if (!line) continue;
+        // Split on the first '=' only: base64 values end in '=' padding
+        const eq = line.indexOf('=');
+        const key = eq > 0 ? line.slice(0, eq).trim() : '';
+        if (!CONTENT_FIELDS.includes(key)) {
+          throw new Error('Malformed content.txt line');
+        }
+        if (key in data) {
+          throw new Error(`content.txt has more than one ${key} line`);
+        }
+        data[key] = line.slice(eq + 1).trim();
+      }
+
+      let version = 1;
+      let iterations = FORMAT1_ITERATIONS;
+      if ('V' in data) {
+        if (data.V !== String(FORMAT_VERSION)) {
+          throw new Error(`content.txt is format ${data.V}, which this page cannot read. Reload the page.`);
+        }
+        if (!/^[0-9]+$/.test(data.ITER || '') || Number(data.ITER) < MIN_ITERATIONS) {
+          throw new Error('content.txt has no valid ITER line');
+        }
+        version = FORMAT_VERSION;
+        iterations = Number(data.ITER);
+      } else if ('ITER' in data) {
+        throw new Error('content.txt has an ITER line but no V line');
+      }
+
+      if (!data.SALT_B64 || !data.IV_B64 || !data.CT_B64) {
+        throw new Error('Missing required fields in content.txt');
+      }
+      return {
+        version,
+        iterations,
+        salt: base64ToBytes('SALT_B64', data.SALT_B64),
+        iv: base64ToBytes('IV_B64', data.IV_B64),
+        ciphertext: base64ToBytes('CT_B64', data.CT_B64)
+      };
+    }
+
+    // The text the key is derived from, for a file of the given format.
+    function passphraseKeyText(passphrase, version) {
+      return version >= 2 ? passphrase.trim().normalize('NFC') : passphrase;
+    }
+
+    // For the encryptor: why a new passphrase can't be used, or '' if it can.
+    function newPassphraseProblem(passphrase) {
+      if (passphrase.trim().length === 0) {
+        return 'Passphrase cannot be empty';
+      }
+      if (passphrase !== passphrase.trim()) {
+        return 'Passphrase cannot start or end with a space';
+      }
+      return '';
+    }
+
+    // The content.txt text for a newly encrypted file (base64 inputs).
+    function formatContent(iterations, saltB64, ivB64, ctB64) {
+      return `V=${FORMAT_VERSION}\nITER=${iterations}\nSALT_B64=${saltB64}\nIV_B64=${ivB64}\nCT_B64=${ctB64}\n`;
+    }
+
+    // Resolves to the plaintext bytes, or null if the passphrase is wrong
+    // or the file is damaged.
+    async function decryptContent(content, passphrase) {
+      const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        new TextEncoder().encode(passphraseKeyText(passphrase, content.version)),
+        'PBKDF2',
+        false,
+        ['deriveKey']
+      );
+      const key = await crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: content.salt, iterations: content.iterations, hash: 'SHA-256' },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['decrypt']
+      );
+      try {
+        return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: content.iv }, key, content.ciphertext));
+      } catch {
+        return null;
+      }
+    }
+    // END locker-core
+
     const AUTO_CLEAR_SECONDS = 60;
+
+    // Detect locker name from URL path
+    // Expected format: /auth-locker/lockername/ or /lockername/
+    function getLockerName() {
+      const path = window.location.pathname;
+      // Remove trailing slash and split by /
+      const parts = path.replace(/\/$/, '').split('/');
+      // Get the last part of the path (locker name)
+      const lockerName = parts[parts.length - 1];
+      // If it's empty or looks like a project name, return null (use default)
+      if (!lockerName || lockerName === 'auth-locker' || lockerName === 'locker.html' || lockerName === 'index.html') {
+        return null;
+      }
+      return lockerName;
+    }
+
+    // Get content.txt path - always relative to current directory
+    // since this template is copied into each locker directory as index.html
+    function getContentPath() {
+      return 'content.txt'; // Always relative to the locker directory
+    }
+
+    // Update subtitle with locker name
+    const lockerName = getLockerName();
+    if (lockerName) {
+      document.getElementById('subtitle').textContent = `Locker: ${lockerName}`;
+    }
 
     // Global state
     let encryptedData = null;
@@ -315,51 +469,18 @@
       statusDiv.className = 'status';
     }
 
-    // Base64 to ArrayBuffer conversion
-    function base64ToArrayBuffer(base64) {
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes.buffer;
-    }
-
     // Load and parse content.txt
     async function loadEncryptedContent() {
       try {
         showStatus('Loading encrypted content...', 'loading');
         
-        const response = await fetch('content.txt');
+        const contentPath = getContentPath();
+        const response = await fetch(contentPath);
         if (!response.ok) {
-          throw new Error('Failed to load content.txt');
+          throw new Error(`Failed to load ${contentPath}`);
         }
         
-        const text = await response.text();
-        const lines = text.trim().split('\n');
-        
-        if (lines.length !== 3) {
-          throw new Error('Invalid content.txt format');
-        }
-
-        const data = {};
-        for (const line of lines) {
-          const [key, value] = line.split('=');
-          if (!key || !value) {
-            throw new Error('Malformed content.txt line');
-          }
-          data[key.trim()] = value.trim();
-        }
-
-        if (!data.SALT_B64 || !data.IV_B64 || !data.CT_B64) {
-          throw new Error('Missing required fields in content.txt');
-        }
-
-        encryptedData = {
-          salt: base64ToArrayBuffer(data.SALT_B64),
-          iv: base64ToArrayBuffer(data.IV_B64),
-          ciphertext: base64ToArrayBuffer(data.CT_B64)
-        };
+        encryptedData = parseContent(await response.text());
 
         hideStatus();
         decryptBtn.disabled = false;
@@ -374,7 +495,7 @@
     async function decrypt() {
       const passphrase = passphraseInput.value;
       
-      if (!passphrase) {
+      if (!passphrase.trim()) {
         showStatus('Please enter your passphrase', 'error');
         return;
       }
@@ -385,47 +506,13 @@
       }
 
       try {
-        showStatus('Deriving encryption key...', 'loading');
+        showStatus('Deriving key and decrypting...', 'loading');
         decryptBtn.disabled = true;
 
-        // Import passphrase as key material
-        const enc = new TextEncoder();
-        const keyMaterial = await crypto.subtle.importKey(
-          'raw',
-          enc.encode(passphrase),
-          'PBKDF2',
-          false,
-          ['deriveKey']
-        );
-
-        // Derive AES-GCM key using PBKDF2
-        const key = await crypto.subtle.deriveKey(
-          {
-            name: 'PBKDF2',
-            salt: encryptedData.salt,
-            iterations: PBKDF2_ITERATIONS,
-            hash: PBKDF2_HASH
-          },
-          keyMaterial,
-          {
-            name: 'AES-GCM',
-            length: PBKDF2_KEYLEN
-          },
-          false,
-          ['decrypt']
-        );
-
-        showStatus('Decrypting...', 'loading');
-
-        // Decrypt using AES-GCM
-        const decrypted = await crypto.subtle.decrypt(
-          {
-            name: 'AES-GCM',
-            iv: encryptedData.iv
-          },
-          key,
-          encryptedData.ciphertext
-        );
+        const decrypted = await decryptContent(encryptedData, passphrase);
+        if (!decrypted) {
+          throw new Error('Decryption failed');
+        }
 
         // Convert to UTF-8 string
         const plaintext = new TextDecoder().decode(decrypted);
