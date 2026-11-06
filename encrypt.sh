@@ -7,7 +7,7 @@
 #
 # Usage:
 #   bash encrypt.sh          # Encrypt to default locker (uses tmp/main.md → docs/content.txt)
-#   bash encrypt.sh sally    # Encrypt to named locker (uses tmp/sally.md → docs/lockers/sally/content.txt)
+#   bash encrypt.sh mylocker # Encrypt to named locker (uses tmp/mylocker.md → docs/lockers/mylocker/content.txt)
 #
 # Reports success only if the output file was actually rewritten by this run.
 set -ue
