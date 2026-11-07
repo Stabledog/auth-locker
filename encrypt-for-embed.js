@@ -2,11 +2,14 @@
  * Encryption Script for Auth Locker
  * 
  * Encrypts plaintext using AES-256-GCM with PBKDF2 key derivation.
- * Outputs SALT_B64, IV_B64, and CT_B64 to docs/content.txt or docs/lockers/{name}/content.txt
+ * Writes a format-2 content.txt (V, ITER, SALT_B64, IV_B64, CT_B64) to
+ * docs/content.txt or docs/lockers/{name}/content.txt. The format, the
+ * iteration count and the passphrase rules come from the decryptor page
+ * (docs/locker.html, via locker-core.js), so the page can always open it.
  * 
  * Usage:
  *   node encrypt-for-embed.js plaintext.txt           # Encrypt file, default locker
- *   node encrypt-for-embed.js plaintext.txt --locker sally  # Encrypt to named locker
+ *   node encrypt-for-embed.js plaintext.txt --locker mylocker  # Encrypt to named locker
  *
  * The plaintext must come from a file: stdin is reserved for the passphrase.
  * Exits nonzero, without touching the output file, if anything goes wrong.
@@ -16,9 +19,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const core = require('./locker-core.js').load();
 
-// Crypto parameters
-const PBKDF2_ITERATIONS = 200000;
+// Crypto parameters (the iteration count is core.NEW_FILE_ITERATIONS)
 const PBKDF2_KEYLEN = 32; // 256 bits for AES-256
 const PBKDF2_DIGEST = 'sha256';
 const SALT_LENGTH = 16; // bytes
@@ -97,13 +100,15 @@ function askLines(questions) {
  */
 async function promptPassword() {
   const [pass1, pass2] = await askLines(['Enter passphrase: ', 'Confirm passphrase: ']);
-  if (pass1 !== pass2) {
+  const problem = core.newPassphraseProblem(pass1);
+  if (problem) {
+    throw new Error(problem);
+  }
+  const keyText = core.passphraseKeyText(pass1, core.FORMAT_VERSION);
+  if (keyText !== core.passphraseKeyText(pass2, core.FORMAT_VERSION)) {
     throw new Error('Passphrases do not match');
   }
-  if (pass1.length === 0) {
-    throw new Error('Passphrase cannot be empty');
-  }
-  return pass1;
+  return keyText;
 }
 
 /**
@@ -121,19 +126,21 @@ async function getPlaintext(inputFile) {
 }
 
 /**
- * Encrypts plaintext with the given passphrase
+ * Encrypts plaintext with the given passphrase (already in key-text form)
  */
 function encryptData(plaintext, passphrase) {
+  const iterations = core.NEW_FILE_ITERATIONS;
+
   // Generate random salt and IV
   const salt = crypto.randomBytes(SALT_LENGTH);
   const iv = crypto.randomBytes(IV_LENGTH);
 
   // Derive key using PBKDF2
-  console.log(`Deriving key with PBKDF2 (${PBKDF2_ITERATIONS} iterations)...`);
+  console.log(`Deriving key with PBKDF2 (${iterations} iterations)...`);
   const key = crypto.pbkdf2Sync(
-    passphrase,
+    Buffer.from(passphrase, 'utf8'),
     salt,
-    PBKDF2_ITERATIONS,
+    iterations,
     PBKDF2_KEYLEN,
     PBKDF2_DIGEST
   );
@@ -153,6 +160,7 @@ function encryptData(plaintext, passphrase) {
 
   // Return Base64-encoded values
   return {
+    iterations,
     saltB64: salt.toString('base64'),
     ivB64: iv.toString('base64'),
     ctB64: ctWithTag.toString('base64')
@@ -163,7 +171,9 @@ function encryptData(plaintext, passphrase) {
  * Writes encrypted data to the specified output file
  */
 function writeOutput(encryptedData, outputPath) {
-  const outputContent = `SALT_B64=${encryptedData.saltB64}\nIV_B64=${encryptedData.ivB64}\nCT_B64=${encryptedData.ctB64}\n`;
+  const outputContent = core.formatContent(
+    encryptedData.iterations, encryptedData.saltB64, encryptedData.ivB64, encryptedData.ctB64
+  );
   
   // Ensure output directory exists
   const outputDir = path.dirname(outputPath);
@@ -250,4 +260,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { encryptData, getPlaintext, promptPassword, askLines, parseArgs, getOutputPath, PBKDF2_ITERATIONS };
+module.exports = { encryptData, getPlaintext, promptPassword, askLines, parseArgs, getOutputPath };

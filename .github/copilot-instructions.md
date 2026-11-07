@@ -27,7 +27,7 @@ Provide a recovery path for critical secrets (like 1Password Secret Key) from an
 
 ### Cryptography
 - **Cipher**: AES-256-GCM (12-byte IV, 16-byte auth tag)
-- **KDF**: PBKDF2-HMAC-SHA256 with 200,000 iterations
+- **KDF**: PBKDF2-HMAC-SHA256; each content.txt records its count (ITER=). New files use NEW_FILE_ITERATIONS in the locker-core block of `docs/locker.html`, the single source; format-1 files (no V= line) use 200,000
 - **Salt**: 16 bytes, randomly generated, stored in Base64
 - **Encoding**: Base64 for all binary data (salt, IV, ciphertext+tag)
 

@@ -8,7 +8,7 @@
 #   bash create-locker.sh --force <locker-name>   # start an existing locker over (asks you to confirm)
 #
 # Example:
-#   bash create-locker.sh sally
+#   bash create-locker.sh mylocker
 #   bash create-locker.sh banking
 #
 # It refuses to touch a locker that already has encrypted content or edited
@@ -48,7 +48,7 @@ die() {
         echo "Usage: bash create-locker.sh [--force] <locker-name>"
         echo
         echo "Examples:"
-        echo "  bash create-locker.sh sally"
+        echo "  bash create-locker.sh mylocker"
         echo "  bash create-locker.sh banking"
         echo "  bash create-locker.sh personal"
         exit 1
